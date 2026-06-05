@@ -1,9 +1,6 @@
 from setuptools import find_packages, setup
-import os
-from glob import glob 
 
-
-package_name = 'navigation_sim1_pkg'
+package_name = 'puzzlebot_navigation_pkg'
 
 setup(
     name=package_name,
@@ -13,12 +10,11 @@ setup(
         ('share/ament_index/resource_index/packages',
             ['resource/' + package_name]),
         ('share/' + package_name, ['package.xml']),
-        (os.path.join('share', package_name, 'launch'),glob('launch/*.[pxy][yma]*')), #,py o #xml, *yaml
     ],
     install_requires=['setuptools'],
     zip_safe=True,
     maintainer='mafer',
-    maintainer_email='mafer@todo.todo',
+    maintainer_email='mafernandaglez05@gmail.com',
     description='TODO: Package description',
     license='TODO: License declaration',
     extras_require={
@@ -28,12 +24,6 @@ setup(
     },
     entry_points={
         'console_scripts': [
-        'astar_planner= navigation_sim1_pkg.astar_planner:main',
-        'controller= navigation_sim1_pkg.controller:main',
-        'odometry= navigation_sim1_pkg.odometry:main',
-        'grid_visualizer= navigation_sim1_pkg.grid_visualizer:main',
-        
-       
         ],
     },
 )

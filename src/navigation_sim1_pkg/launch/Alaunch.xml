@@ -15,7 +15,7 @@
   <arg name="obstacles" default= "3,6;4,6;5,6;3,5;5,5;3,4;4,4;5,4"/>
   <arg name="draw_grid" default="true"/>
 
-  <arg name="pkg" default="retomike"/>
+  <arg name="pkg" default="navigation_sim1_pkg"/>
 
   <node
     pkg="turtlesim"
