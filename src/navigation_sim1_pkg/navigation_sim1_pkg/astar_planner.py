@@ -1,30 +1,4 @@
 #!/usr/bin/env python3
-"""
-Reto 2 — A* Grid Planner para TurtleSim (ROS2 Humble)
-======================================================
-Arquitectura:
-  Este nodo calcula un camino libre de obstáculos usando A* sobre un grid
-  y publica los waypoints uno a uno al puzzlebot_controller existente.
-  NUEVO: publica nodos expandidos y el path completo para visualización.
-
-Tópicos:
-  Publica  → /goals              (turtlesim/msg/Pose)        waypoint actual
-  Publica  → /astar/expanded     (std_msgs/msg/String)       nodos expandidos (JSON)
-  Publica  → /astar/path         (std_msgs/msg/String)       path final (JSON)
-  Suscribe → /goal_reached       (std_msgs/msg/Bool)         confirmación del controlador
-  Suscribe → /odom               (geometry_msgs/msg/Pose2D)  posición actual
-
-Parámetros ROS2:
-  grid_size      (int,   default 10)
-  cell_size      (float, default 0.50)
-  origin_x       (float, default 0.5)
-  origin_y       (float, default 0.5)
-  start_col      (int,   default 0)
-  start_row      (int,   default 0)
-  goal_col       (int,   default 9)
-  goal_row       (int,   default 9)
-  obstacles      (str,   default "2,2;2,3;3,2;5,5;5,6;6,5;7,3;3,7")
-"""
 
 import rclpy
 import math
@@ -36,35 +10,12 @@ from geometry_msgs.msg import Pose2D
 from std_msgs.msg import Bool, String
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Algoritmo A*  (puro Python, sin dependencias externas)
-# ─────────────────────────────────────────────────────────────────────────────
 
 def heuristic(a, b):
-    """
-    Distancia Euclidiana como heurística admisible.
-    Es admisible porque nunca sobreestima el costo real al usar
-    conectividad-8 con costos 1.0 (cardinal) y √2 (diagonal).
-    """
     return math.sqrt((a[0] - b[0])**2 + (a[1] - b[1])**2)
 
 
 def astar(grid, start, goal):
-    """
-    Busca el camino de menor costo en un grid 2D con conectividad 8.
-
-    Args:
-        grid  : lista de listas, 0=libre, 1=obstáculo.  grid[row][col]
-        start : (col, row) celda inicial
-        goal  : (col, row) celda objetivo
-
-    Returns:
-        (path, expanded_order)
-          path           : lista de (col,row) desde start hasta goal inclusive,
-                           o None si no existe camino.
-          expanded_order : lista de (col,row) en el orden en que fueron
-                           expandidos (extraídos del heap), incluyendo start.
-    """
     rows = len(grid)
     cols = len(grid[0])
 
@@ -83,7 +34,7 @@ def astar(grid, start, goal):
     open_heap    = []          # min-heap: (f_cost, col, row)
     past_cost    = {}          # (col,row) → g-cost mínimo encontrado
     parent       = {}          # (col,row) → nodo anterior en el camino
-    expanded_order = []        # NUEVO: orden de expansión de nodos
+    expanded_order = []        # orden de expansión de nodos
 
     past_cost[start] = 0.0
     est = heuristic(start, goal)
@@ -139,9 +90,6 @@ def astar(grid, start, goal):
     return None, expanded_order   # Sin solución
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-#  Nodo ROS2
-# ─────────────────────────────────────────────────────────────────────────────
 
 class AStarPlannerNode(Node):
 
@@ -149,7 +97,7 @@ class AStarPlannerNode(Node):
         super().__init__('astar_planner')
         self.get_logger().info("A* Planner iniciado")
 
-        # ── Parámetros ──────────────────────────────────────────────────────
+
         self.declare_parameter('grid_size', 10)
         self.declare_parameter('cell_size', 0.50)
         self.declare_parameter('origin_x',  0.5)
@@ -170,14 +118,14 @@ class AStarPlannerNode(Node):
         goal_row       = self.get_parameter('goal_row').value
         obstacles_str  = self.get_parameter('obstacles').value
 
-        # ── Construir grid ──────────────────────────────────────────────────
+
         N = self.grid_size
         self.grid = [[0] * N for _ in range(N)]
         self.obstacles_cells = self._parse_obstacles(obstacles_str, N)
         for (c, r) in self.obstacles_cells:
             self.grid[r][c] = 1
 
-        # ── Ejecutar A* ─────────────────────────────────────────────────────
+        #  Ejecutar A* 
         start = (start_col, start_row)
         goal  = (goal_col,  goal_row)
         self._log_grid(start, goal)
@@ -202,29 +150,25 @@ class AStarPlannerNode(Node):
             )
             self._log_path(path)
 
-        # ── Estado de navegación ────────────────────────────────────────────
+        #  Estado de navegación 
         self.current_wp  = 0
         self.waiting     = False
         self._done_logged = False
 
-        # ── Publishers ──────────────────────────────────────────────────────
+
         self.pub_goal     = self.create_publisher(Pose,   '/goals',          10)
         self.pub_expanded = self.create_publisher(String, '/astar/expanded',  10)
         self.pub_path     = self.create_publisher(String, '/astar/path',      10)
 
-        # ── Subscribers ─────────────────────────────────────────────────────
         self.create_subscription(Bool,   '/goal_reached', self.cb_goal_reached, 10)
         self.create_subscription(Pose2D, '/odom',         self.cb_odom,          1)
 
         # ── Timers ──────────────────────────────────────────────────────────
-        # Publica expansión y path al visualizador (arrancan tras 1.5 s para
-        # que el visualizador ya esté suscrito antes de recibir los datos)
-        self.create_timer(1.5, self._publish_viz_data)
         self._viz_published = False
 
         self.create_timer(0.5, self.run_logic)
 
-    # ── Helpers de conversión ───────────────────────────────────────────────
+
 
     def _parse_obstacles(self, obs_str: str, N: int):
         cells = []
@@ -252,18 +196,13 @@ class AStarPlannerNode(Node):
         return cells
 
     def _cell_to_world(self, col: int, row: int):
-        """Centro de la celda (col, row) en metros (coordenadas TurtleSim)."""
         x = self.origin_x + (col + 0.5) * self.cell_size
         y = self.origin_y + (row + 0.5) * self.cell_size
         return (x, y)
 
-    # ── Publicar datos de visualización ────────────────────────────────────
 
     def _publish_viz_data(self):
-        """
-        Publica una sola vez la lista de nodos expandidos y el path
-        como JSON para que el grid_visualizer los dibuje.
-        """
+
         if self._viz_published:
             return
         self._viz_published = True
@@ -284,7 +223,7 @@ class AStarPlannerNode(Node):
             f"Publicado path ({len(self.path_cells)} celdas) → /astar/path"
         )
 
-    # ── Logging visual del grid en consola ────────────────────────────────
+
 
     def _log_grid(self, start, goal):
         N = self.grid_size
@@ -335,7 +274,7 @@ class AStarPlannerNode(Node):
         lines.append(f"\n  Costo total del camino: {cost:.3f} celdas")
         self.get_logger().info("\n".join(lines))
 
-    # ── Callbacks ROS ─────────────────────────────────────────────────────
+
 
     def cb_goal_reached(self, msg: Bool):
         if msg.data and self.waiting:
@@ -370,7 +309,7 @@ class AStarPlannerNode(Node):
         self.pub_goal.publish(msg)
         self.waiting = True
         self.get_logger().info(
-            f"→ Waypoint {self.current_wp + 1}/{len(self.waypoints)}: "
+            f"Waypoint {self.current_wp + 1}/{len(self.waypoints)}: "
             f"({x:.2f}, {y:.2f})"
         )
 

@@ -1,29 +1,5 @@
 #!/usr/bin/env python3
-"""
-Odometría para TurtleSim / Robot Físico (ROS2 Humble)
-======================================================
-Modo TurtleSim (activo):
-  Suscribe a /turtle1/pose (turtlesim/msg/Pose) y republica como
-  geometry_msgs/msg/Pose2D en /odom. Las coordenadas se pasan sin
-  offset para que coincidan exactamente con los waypoints del planner A*.
 
-Modo robot físico (comentado):
-  Integra odometría diferencial usando velocidades de encoder:
-    v     = r * (wR + wL) / 2        [velocidad lineal]
-    w     = r * (wR - wL) / L        [velocidad angular]
-    x    += dt * v * cos(theta)      [integración Euler]
-    y    += dt * v * sin(theta)
-    theta += dt * w
-  donde r = radio de rueda, L = distancia entre ruedas.
-
-Tópicos (modo TurtleSim):
-  Suscribe → /turtle1/pose   (turtlesim/msg/Pose)
-  Publica  → /odom           (geometry_msgs/msg/Pose2D)
-
-Tópicos adicionales (modo robot físico, descomentar):
-  Suscribe → /VelocityEncR   (std_msgs/msg/Float32)
-  Suscribe → /VelocityEncL   (std_msgs/msg/Float32)
-"""
 
 import rclpy
 import time
@@ -41,12 +17,12 @@ class PuzzlebotOdometry(Node):
         super().__init__('odometry')
         self.get_logger().info("Odometry node iniciado (modo TurtleSim → /odom Pose2D)")
 
-        # ── Parámetros físicos del robot (modo encoder) ──────────────────────
+        #  Parámetros físicos del robot 
         self.r    = 0.05    # radio de rueda [m]
         self.L    = 0.182   # distancia entre ruedas (baseline) [m]
         self.rate = 100     # frecuencia de integración [Hz]
 
-        # ── Estado encoder (modo robot físico) ──────────────────────────────
+        #  Encoder 
         self.wR    = 0.0
         self.wL    = 0.0
         self.v     = 0.0
@@ -55,13 +31,13 @@ class PuzzlebotOdometry(Node):
         self.y     = 5.5
         self.theta = 0.0
 
-        # ── Publisher ────────────────────────────────────────────────────────
+        #  Publisher 
         self.pub = self.create_publisher(Pose2D, '/odom', 10)
 
-        # ── Suscriptor modo TurtleSim (activo) ──────────────────────────────
+        #  Suscriptor  TurtleSim 
         self.create_subscription(Pose, '/turtle1/pose', self.cb_pose, 10)
 
-        # ── Suscriptores modo robot físico (descomentar para usar) ───────────
+        #  Suscriptores  robot físico 
         # self.create_subscription(
         #     Float32, '/VelocityEncR', self.cb_wR, qos_profile_sensor_data)
         # self.create_subscription(
@@ -70,21 +46,17 @@ class PuzzlebotOdometry(Node):
 
         self.t0 = time.time()
 
-    # ── Callback TurtleSim ───────────────────────────────────────────────────
+
 
     def cb_pose(self, msg: Pose):
-        """
-        Reenvía la pose de turtlesim directamente como Pose2D.
-        No se aplica offset: las coordenadas absolutas de TurtleSim (~0-11 m)
-        deben coincidir exactamente con los waypoints del planner A*.
-        """
+     
         out       = Pose2D()
         out.x     = msg.x
         out.y     = msg.y
         out.theta = msg.theta
         self.pub.publish(out)
 
-    # ── Callbacks encoder (robot físico) ────────────────────────────────────
+
 
     def cb_wR(self, msg: Float32):
         self.wR = msg.data
@@ -92,24 +64,10 @@ class PuzzlebotOdometry(Node):
     def cb_wL(self, msg: Float32):
         self.wL = msg.data
 
-    # ── Odometría diferencial (robot físico) ─────────────────────────────────
+    #  Odometría robot 
 
     def cb_odometry(self):
-        """
-        Integración de odometría diferencial por encoders.
 
-        Modelo cinemático differential drive:
-          v      = r * (wR + wL) / 2    → velocidad lineal del centro
-          w      = r * (wR - wL) / L    → velocidad angular
-
-        Integración Euler (primer orden):
-          x(t+dt)     = x(t)     + dt * v * cos(theta(t))
-          y(t+dt)     = y(t)     + dt * v * sin(theta(t))
-          theta(t+dt) = theta(t) + dt * w
-
-        El ángulo se normaliza a [-π, π] con atan2(sin, cos) para evitar
-        acumulación de error y wrap-around.
-        """
         dt      = time.time() - self.t0
         self.t0 = time.time()
 

@@ -1,42 +1,4 @@
 #!/usr/bin/env python3
-"""
-Grid Visualizer OPTIMIZADO para TurtleSim (ROS2 Humble)
-========================================================
-MEJORAS RESPECTO A LA VERSIÓN ANTERIOR:
-  1. VELOCIDAD: dibuja líneas del grid con trazos continuos (snake pattern)
-     en lugar de teleport por cada segmento → ~10x más rápido.
-  2. VELOCIDAD: el relleno de celdas usa 3 líneas densas en lugar de N/0.04
-     llamadas de servicio.
-  3. NUEVO: dibuja nodos expandidos por A* (color amarillo/naranja).
-  4. NUEVO: dibuja el path final (color cyan/blanco) encima de todo.
-  5. Suscribe a /astar/expanded y /astar/path (JSON) publicados por el planner.
-
-Orden de dibujado:
-  1. Líneas del grid (gris)
-  2. Obstáculos (rojo)
-  3. Celda inicio (verde) + marcador
-  4. Celda meta (azul) + marcador
-  5. Nodos expandidos (naranja claro) — al recibir /astar/expanded
-  6. Path final (cyan) — al recibir /astar/path
-
-Parámetros ROS2 (deben coincidir con astar_planner_node):
-  grid_size  (int,   default 10)
-  cell_size  (float, default 0.50)
-  origin_x   (float, default 0.5)
-  origin_y   (float, default 0.5)
-  obstacles  (str,   default "2,2;2,3;3,2;5,5;5,6;6,5;7,3;3,7")
-  draw_grid  (bool,  default True)
-  start_col  (int,   default 0)
-  start_row  (int,   default 0)
-  goal_col   (int,   default 9)
-  goal_row   (int,   default 9)
-
-Uso:
-  ros2 run <paquete> grid_visualizer_node --ros-args \
-    -p obstacles:="2,2;3,2;4,2;5,2" \
-    -p goal_col:=9 -p goal_row:=9
-"""
-
 import rclpy
 import math
 import json
@@ -53,7 +15,7 @@ class GridVisualizerNode(Node):
         super().__init__('grid_visualizer')
         self.get_logger().info("Grid Visualizer (optimizado) iniciado")
 
-        # ── Parámetros ──────────────────────────────────────────────────────
+
         self.declare_parameter('grid_size', 10)
         self.declare_parameter('cell_size', 0.50)
         self.declare_parameter('origin_x',  0.5)
@@ -78,10 +40,10 @@ class GridVisualizerNode(Node):
 
         self.obstacles = self._parse_obstacles(obs_str)
 
-        # Conjuntos para evitar redibujar sobre obstáculos/start/goal
+
         self._obstacle_set = set(self.obstacles)
 
-        # ── Clientes de servicios turtlesim ─────────────────────────────────
+        #  Clientes de servicios turtlesim 
         self.cli_spawn    = self.create_client(Spawn,            '/spawn')
         self.cli_kill     = self.create_client(Kill,             '/kill')
         self.cli_teleport = self.create_client(TeleportAbsolute, '/painter/teleport_absolute')
@@ -91,7 +53,7 @@ class GridVisualizerNode(Node):
         self.cli_spawn.wait_for_service(timeout_sec=5.0)
         self.cli_clear.wait_for_service(timeout_sec=5.0)
 
-        # ── Suscriptores para datos del planner ─────────────────────────────
+
         self.create_subscription(String, '/astar/expanded', self.cb_expanded, 10)
         self.create_subscription(String, '/astar/path',     self.cb_path,     10)
 
@@ -99,10 +61,10 @@ class GridVisualizerNode(Node):
         self._expanded_drawn  = False
         self._path_drawn      = False
 
-        # Arrancar dibujado base tras 1 s
+
         self.create_timer(1.0, self._start_drawing)
 
-    # ── Parser de obstáculos ────────────────────────────────────────────────
+
     def _parse_obstacles(self, obs_str: str):
         cells = []
         for token in obs_str.split(';'):
@@ -120,7 +82,7 @@ class GridVisualizerNode(Node):
                 continue
         return cells
 
-    # ── Coordenadas ─────────────────────────────────────────────────────────
+    #  Coordenadas 
     def _cell_center(self, col, row):
         x = self.ox + (col + 0.5) * self.cell
         y = self.oy + (row + 0.5) * self.cell
@@ -149,7 +111,7 @@ class GridVisualizerNode(Node):
     def _pen_up(self):
         self._set_pen(0, 0, 0, width=1, off=1)
 
-    # ── Spawn de la tortuga pincel ───────────────────────────────────────────
+
     def _spawn_painter(self):
         # Matar si ya existe
         if self.cli_kill.service_is_ready():
@@ -169,13 +131,6 @@ class GridVisualizerNode(Node):
         self.cli_teleport.wait_for_service(timeout_sec=5.0)
         self.cli_pen.wait_for_service(timeout_sec=5.0)
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  OPTIMIZACIÓN: dibujar grid con patrón snake
-    #  En lugar de teleport+pen_up+pen_down por cada segmento, dibuja todas
-    #  las líneas verticales en un recorrido continuo de arriba a abajo
-    #  alternando dirección (zigzag), y luego las horizontales igual.
-    #  Número de teleports: 2*(N+1) en lugar de 4*(N+1).
-    # ─────────────────────────────────────────────────────────────────────────
     def _draw_grid_lines(self):
         self.get_logger().info("Dibujando grid (modo rápido)...")
         r, g, b = 70, 70, 70
@@ -213,18 +168,8 @@ class GridVisualizerNode(Node):
 
         self.get_logger().info("Grid dibujado ✓")
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  OPTIMIZACIÓN: relleno de celda con solo 3 líneas horizontales densas
-    #  (en lugar de cell/0.04 llamadas). Suficiente para que visualmente
-    #  se vea como un cuadrado sólido, y mucho más rápido.
-    # ─────────────────────────────────────────────────────────────────────────
+
     def _fill_cell_fast(self, col, row, r_=180, g_=40, b_=40, lines=5):
-        """
-        Rellena una celda con `lines` trazos horizontales.
-        Menos teleports = más velocidad sin perder claridad visual.
-        Parámetros renombrados r_/g_/b_ para evitar conflicto con la variable
-        de iteración 'r' (row) usada en los loops del visualizador.
-        """
         x0, y0 = self._cell_corner(col, row)
         x1 = x0 + self.cell
         self._pen_up()
@@ -246,7 +191,7 @@ class GridVisualizerNode(Node):
             self._teleport(cx, cy)
         self._pen_up()
 
-    # ── Marcadores ──────────────────────────────────────────────────────────
+    #  Marcadores 
     def _draw_cross(self, col, row, r, g, b, size_factor=0.4):
         cx, cy = self._cell_center(col, row)
         half = self.cell * size_factor / 2
@@ -275,13 +220,8 @@ class GridVisualizerNode(Node):
             )
         self._pen_up()
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  NUEVO: dibujar nodos expandidos por A*
-    #  Se dibuja como un punto (dot) pequeño en el centro de cada celda.
-    #  No se sobreescriben obstáculos, start ni goal.
-    # ─────────────────────────────────────────────────────────────────────────
+
     def _draw_expanded_node(self, col, row):
-        """Dibuja un punto pequeño naranja en el centro de la celda."""
         cx, cy = self._cell_center(col, row)
         radius = self.cell * 0.15
         steps  = 10
@@ -296,15 +236,8 @@ class GridVisualizerNode(Node):
             )
         self._pen_up()
 
-    # ─────────────────────────────────────────────────────────────────────────
-    #  NUEVO: dibujar el path final
-    #  Línea continua cyan que conecta el centro de cada celda del camino.
-    # ─────────────────────────────────────────────────────────────────────────
+
     def _draw_path_line(self, path_cells):
-        """
-        Dibuja una línea continua gruesa que une los centros de las
-        celdas del path encontrado por A*.
-        """
         if not path_cells:
             return
         self._pen_up()
@@ -319,10 +252,6 @@ class GridVisualizerNode(Node):
     # ── Callbacks del planner ────────────────────────────────────────────────
 
     def cb_expanded(self, msg: String):
-        """
-        Recibe la lista de nodos expandidos y los dibuja.
-        Solo se ejecuta una vez (después del dibujado base).
-        """
         if self._expanded_drawn or not self._base_drawn:
             return
         self._expanded_drawn = True
@@ -348,10 +277,6 @@ class GridVisualizerNode(Node):
         self.get_logger().info("Nodos expandidos dibujados ✓")
 
     def cb_path(self, msg: String):
-        """
-        Recibe el path final y lo dibuja encima de todo.
-        Espera a que los nodos expandidos estén dibujados.
-        """
         if self._path_drawn or not self._expanded_drawn:
             # Reintentar en 0.5 s si la expansión aún no se dibujó
             self.create_timer(0.5, lambda: self.cb_path(msg))
@@ -377,10 +302,10 @@ class GridVisualizerNode(Node):
         # Aparcar el pintor fuera del área de juego
         self._pen_up()
         self._teleport(0.2, 0.2)
-        self.get_logger().info("Path dibujado ✓  —  Visualización completa ✓")
+        self.get_logger().info("Path dibujado   —  Visualización completa ")
         self.get_logger().info("Ahora corre el robot (puzzlebot_controller).")
 
-    # ── Rutina principal de dibujado base ────────────────────────────────────
+
 
     def _start_drawing(self):
         if self._base_drawn:
@@ -399,22 +324,22 @@ class GridVisualizerNode(Node):
         self.get_logger().info(f"Dibujando {len(self.obstacles)} obstáculos...")
         for (c, r) in self.obstacles:
             self._fill_cell_fast(c, r, r_=180, g_=40, b_=40)
-        self.get_logger().info("Obstáculos dibujados ✓")
+        self.get_logger().info("Obstáculos dibujados ")
 
         # 3. Celda inicio → verde
         self._fill_cell_fast(self.start[0], self.start[1], r_=40, g_=160, b_=40)
         self._draw_circle(self.start[0], self.start[1], 255, 255, 255)
-        self.get_logger().info("Celda inicio (verde) ✓")
+        self.get_logger().info("Celda inicio (verde) ")
 
         # 4. Celda meta → azul
         self._fill_cell_fast(self.goal[0], self.goal[1], r_=40, g_=80, b_=200)
         self._draw_cross(self.goal[0], self.goal[1], 255, 255, 255)
-        self.get_logger().info("Celda meta (azul) ✓")
+        self.get_logger().info("Celda meta (azul) ")
 
         self._pen_up()
         self._teleport(0.2, 0.2)
         self.get_logger().info(
-            "Dibujado base completo ✓  —  Esperando datos del planner A*..."
+            "Dibujado base completo   —  Esperando datos del planner A*..."
         )
 
 

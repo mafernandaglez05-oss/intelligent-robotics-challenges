@@ -24,6 +24,10 @@ setup(
     },
     entry_points={
         'console_scripts': [
+        'rrt_visualizer= retomike.rrt_visualizer:main',
+	'rrt_planner= retomike.rrt_planner:main',
+	'odometry= retomike.odometry:main',
+	'controller= retomike.controller:main',
         ],
     },
 )

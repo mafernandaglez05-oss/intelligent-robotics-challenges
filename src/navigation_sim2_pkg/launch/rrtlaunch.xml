@@ -1,18 +1,7 @@
 <launch>
-  <!-- ══════════════════════════════════════════════════════════════════════
-       RRT Sampling Planner — Launch File  (ROS2 Humble)
-       ══════════════════════════════════════════════════════════════════════
-       Orden de arranque:
-         1. turtlesim_node      — simulador
-         2. odometry_node       — republica /turtle1/pose → /odom (Pose2D)
-         3. controller          — FSM stop→align→move, suscribe /goals
-         4. rrt_visualizer      — dibuja obstáculos, start, goal, árbol y path
-         5. rrt_planner_node    — construye RRT, publica waypoints y viz data
 
-       PARÁMETROS GLOBALES: cambia aquí y se propagan a todos los nodos.
-       ══════════════════════════════════════════════════════════════════════ -->
 
-  <!-- ── Caso por defecto: 4 obstáculos dispersos ──────────────────────── -->
+  <!-- def 4 obstáculos -->
   <arg name="start_x"     default="1.0"/>
   <arg name="start_y"     default="1.0"/>
   <arg name="goal_x"      default="9.0"/>
@@ -26,12 +15,10 @@
   <arg name="obstacles"
        default="3.0,3.0,0.8;6.0,4.0,0.8;4.0,7.0,0.8;7.0,7.5,0.8"/>
 
-  <!-- ══════════════════════════════════════════════════════════════════════
-       CAMBIA ESTE VALOR por el nombre real de tu paquete ROS2
-       ══════════════════════════════════════════════════════════════════════ -->
+ 
   <arg name="pkg" default="retomike"/>
 
-  <!-- ── 1. TurtleSim ───────────────────────────────────────────────────── -->
+
   <node
     pkg="turtlesim"
     exec="turtlesim_node"
@@ -39,7 +26,7 @@
     output="screen"
   />
 
-  <!-- ── 2. Odometría ───────────────────────────────────────────────────── -->
+
   <node
     pkg="$(var pkg)"
     exec="odometry"
@@ -47,7 +34,7 @@
     output="screen"
   />
 
-  <!-- ── 3. Controlador ─────────────────────────────────────────────────── -->
+
   <node
     pkg="$(var pkg)"
     exec="controller"
@@ -60,10 +47,7 @@
     <param name="tolerance_angle" value="0.05"/>
   </node>
 
-  <!-- ── 4. Visualizador RRT ────────────────────────────────────────────── -->
-  <!-- Dibuja el mapa base (obstáculos, start, goal) al arrancar.           -->
-  <!-- Luego espera /rrt/tree_edges y /rrt/path del planner para dibujar    -->
-  <!-- el árbol (verde) y el camino final (cyan).                           -->
+  
   <node
     pkg="$(var pkg)"
     exec="rrt_visualizer"

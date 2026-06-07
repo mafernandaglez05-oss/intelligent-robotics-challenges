@@ -1,33 +1,4 @@
 #!/usr/bin/env python3
-"""
-RRT Visualizer OPTIMIZADO para TurtleSim (ROS2 Humble)
-=======================================================
-MEJORAS RESPECTO A LA VERSIÓN ANTERIOR:
-  1. VELOCIDAD: relleno de obstáculos circulares con líneas paralelas
-     horizontales en lugar de anillos concéntricos → mucho menos teleports.
-  2. NUEVO: suscribe a /rrt/tree_edges y dibuja todas las aristas del árbol
-     RRT en color verde oscuro (trazos continuos agrupados).
-  3. NUEVO: suscribe a /rrt/path y dibuja el camino final en cyan grueso.
-  4. Redibuja marcadores de start/goal encima al terminar.
-
-Orden de dibujado:
-  1. Borde del mundo        (gris)
-  2. Obstáculos circulares  (rojo)     ← al arrancar
-  3. Marcador inicio        (verde)
-  4. Marcador meta          (azul)
-  5. Aristas del árbol RRT  (verde oscuro)  ← al recibir /rrt/tree_edges
-  6. Path final             (cyan grueso)   ← al recibir /rrt/path
-  7. Re-dibujar marcadores start/goal encima
-
-Parámetros (deben coincidir con rrt_planner_node):
-  start_x    (float, default 1.0)
-  start_y    (float, default 1.0)
-  goal_x     (float, default 9.0)
-  goal_y     (float, default 9.0)
-  world_min  (float, default 0.5)
-  world_max  (float, default 10.5)
-  obstacles  (str)  "cx,cy,radio;..."
-"""
 
 import rclpy
 import math
@@ -44,7 +15,7 @@ class RRTVisualizerNode(Node):
         super().__init__('rrt_visualizer')
         self.get_logger().info("RRT Visualizer (optimizado) iniciado")
 
-        # ── Parámetros ────────────────────────────────────────────────────
+        #  Parámetros 
         self.declare_parameter('start_x',   1.0)
         self.declare_parameter('start_y',   1.0)
         self.declare_parameter('goal_x',    10.0)
@@ -63,7 +34,7 @@ class RRTVisualizerNode(Node):
         self.obstacles = self._parse_obstacles(
                              self.get_parameter('obstacles').value)
 
-        # ── Clientes de servicio ──────────────────────────────────────────
+        #  Clientes de servicio 
         self.cli_spawn    = self.create_client(Spawn,            '/spawn')
         self.cli_kill     = self.create_client(Kill,             '/kill')
         self.cli_teleport = None   # se asigna tras spawn
@@ -71,19 +42,19 @@ class RRTVisualizerNode(Node):
 
         self.cli_spawn.wait_for_service(timeout_sec=5.0)
 
-        # ── Flags de estado ───────────────────────────────────────────────
+        # Flags de estado 
         self._base_drawn     = False
         self._tree_drawn     = False
         self._path_drawn     = False
 
-        # ── Suscriptores del planner ──────────────────────────────────────
+        #  Suscriptores 
         self.create_subscription(String, '/rrt/tree_edges', self.cb_tree_edges, 10)
         self.create_subscription(String, '/rrt/path',       self.cb_path,       10)
 
-        # Arrancar dibujado base 1 s después del inicio
+
         self.create_timer(1.0, self._start_base)
 
-    # ── Parser ────────────────────────────────────────────────────────────
+
 
     def _parse_obstacles(self, obs_str: str):
         result = []
@@ -147,17 +118,8 @@ class RRTVisualizerNode(Node):
         self.cli_teleport.wait_for_service(timeout_sec=5.0)
         self.cli_pen.wait_for_service(timeout_sec=5.0)
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  OPTIMIZACIÓN: relleno circular con líneas horizontales paralelas
-    #  En lugar de N anillos concéntricos (cada uno con 12-36 teleports),
-    #  dibuja líneas horizontales de x0 a x1 a distintas alturas y.
-    #  Teleports totales ≈ 2 * (2*radius/step) → mucho menos llamadas.
-    # ─────────────────────────────────────────────────────────────────────
+    
     def _fill_circle_fast(self, cx, cy, radius, r, g, b, lines=12):
-        """
-        Rellena un círculo con líneas horizontales paralelas.
-        `lines` controla la densidad del relleno.
-        """
         self._pen_up()
         for i in range(lines):
             # Posición vertical de la línea: de -radius a +radius
@@ -224,18 +186,8 @@ class RRTVisualizerNode(Node):
             self._teleport(cx, cy)
         self._pen_up()
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  NUEVO: dibujar árbol RRT
-    #  Recibe lista de aristas [[x0,y0],[x1,y1]] y las traza.
-    #  OPTIMIZACIÓN: agrupa teleports consecutivos cuando el inicio de
-    #  una arista coincide con el final de la anterior (evita pen_up/down
-    #  innecesarios).
-    # ─────────────────────────────────────────────────────────────────────
+
     def _draw_tree_edges(self, edges):
-        """
-        Dibuja las aristas del árbol RRT en verde oscuro.
-        Cada arista es un segmento corto (≈ step_size metros).
-        """
         if not edges:
             return
 
@@ -253,10 +205,6 @@ class RRTVisualizerNode(Node):
         self._pen_up()
         self.get_logger().info("Árbol RRT dibujado ✓")
 
-    # ─────────────────────────────────────────────────────────────────────
-    #  NUEVO: dibujar path final
-    #  Línea continua cyan gruesa que une los nodos del camino.
-    # ─────────────────────────────────────────────────────────────────────
     def _draw_path_line(self, path_nodes):
         """Dibuja el path como línea continua cyan."""
         if not path_nodes:
@@ -271,12 +219,11 @@ class RRTVisualizerNode(Node):
         for px, py in path_nodes[1:]:
             self._teleport(px, py)
         self._pen_up()
-        self.get_logger().info("Path dibujado ✓")
+        self.get_logger().info("Path dibujado ")
 
-    # ── Callbacks del planner ─────────────────────────────────────────────
+
 
     def cb_tree_edges(self, msg: String):
-        """Recibe aristas del árbol y las dibuja. Solo una vez."""
         if self._tree_drawn or not self._base_drawn:
             return
         self._tree_drawn = True
@@ -290,10 +237,6 @@ class RRTVisualizerNode(Node):
         self._draw_tree_edges(edges)
 
     def cb_path(self, msg: String):
-        """
-        Recibe el path y lo dibuja encima del árbol.
-        Espera a que el árbol esté dibujado primero.
-        """
         if self._path_drawn:
             return
 
@@ -306,13 +249,11 @@ class RRTVisualizerNode(Node):
         self._draw_path_final(msg)
 
     def _retry_path(self):
-        """Timer de reintento para dibujar el path."""
         if hasattr(self, '_pending_path_msg') and not self._path_drawn:
             if self._tree_drawn:
                 self._draw_path_final(self._pending_path_msg)
 
     def _draw_path_final(self, msg: String):
-        """Dibuja el path y redibuja marcadores encima."""
         if self._path_drawn:
             return
         self._path_drawn = True
@@ -335,10 +276,10 @@ class RRTVisualizerNode(Node):
         self._pen_up()
         self._teleport(0.2, 0.2)
         self.get_logger().info(
-            "Visualización completa ✓  —  El robot navegará ahora."
+            "Visualización completa  —  El robot navegará ahora."
         )
 
-    # ── Rutina de dibujado base ───────────────────────────────────────────
+
 
     def _start_base(self):
         if self._base_drawn:
@@ -357,22 +298,22 @@ class RRTVisualizerNode(Node):
         self.get_logger().info(f"Dibujando {len(self.obstacles)} obstáculos...")
         for (cx, cy, radius) in self.obstacles:
             self._fill_circle_fast(cx, cy, radius, 180, 40, 40, lines=14)
-        self.get_logger().info("Obstáculos dibujados ✓")
+        self.get_logger().info("Obstáculos dibujados ")
 
         # 3. Start → verde
         self._fill_circle_fast(self.sx, self.sy, 0.25, 40, 160, 40, lines=8)
         self._draw_circle_outline(self.sx, self.sy, 0.15, 255, 255, 255, width=3)
-        self.get_logger().info("Start (verde) ✓")
+        self.get_logger().info("Start (verde) ")
 
         # 4. Goal → azul
         self._fill_circle_fast(self.gx, self.gy, 0.35, 40, 80, 200, lines=8)
         self._draw_cross(self.gx, self.gy, 0.4, 255, 255, 255, width=4)
-        self.get_logger().info("Goal (azul) ✓")
+        self.get_logger().info("Goal (azul) ")
 
         self._pen_up()
         self._teleport(0.2, 0.2)
         self.get_logger().info(
-            "Dibujado base completo ✓  —  Esperando datos del planner RRT..."
+            "Dibujado base completo   —  Esperando datos del planner RRT..."
         )
 
 

@@ -1,21 +1,5 @@
 #!/usr/bin/env python3
-"""
-Puzzlebot Controller — Closed-Loop para TurtleSim (ROS2 Humble)
-================================================================
-Máquina de estados: stop → align → move → stop
 
-Tópicos:
-  Publica  → /turtle1/cmd_vel  (geometry_msgs/msg/Twist)   comandos de velocidad
-  Publica  → /goal_reached     (std_msgs/msg/Bool)         confirmación de waypoint
-  Suscribe → /odom             (geometry_msgs/msg/Pose2D)  posición actual
-  Suscribe → /goals            (turtlesim/msg/Pose)        waypoint objetivo
-
-Parámetros:
-  Kw              (float, default 4.0)   — ganancia del controlador angular
-  v_normal        (float, default 0.2)   — velocidad lineal nominal [m/s]
-  tolerance_dist  (float, default 0.05)  — tolerancia de llegada [m]
-  tolerance_angle (float, default 0.05)  — tolerancia de alineación [rad]
-"""
 
 import rclpy
 import math
@@ -31,15 +15,15 @@ class PuzzlebotControllerClass(Node):
         super().__init__("controller")
         self.get_logger().info("Puzzlebot controller iniciado")
 
-        # ── Publishers ──────────────────────────────────────────────────────
+
         self.pub        = self.create_publisher(Twist, "/turtle1/cmd_vel", 1)
         self.status_pub = self.create_publisher(Bool,  "/goal_reached",    10)
 
-        # ── Subscribers ─────────────────────────────────────────────────────
+
         self.create_subscription(Pose2D, "/odom",  self.cb_pose,   1)
         self.create_subscription(Pose,   "/goals", self.cb_target, 1)
 
-        # ── Parámetros ──────────────────────────────────────────────────────
+
         self.declare_parameter("Kw",              4.0)
         self.declare_parameter("v_normal",        0.2)
         self.declare_parameter("tolerance_dist",  0.05)
@@ -50,20 +34,20 @@ class PuzzlebotControllerClass(Node):
         self.tolerance_dist  = self.get_parameter("tolerance_dist").value
         self.tolerance_angle = self.get_parameter("tolerance_angle").value
 
-        # ── FSM ─────────────────────────────────────────────────────────────
+        #  FSM 
         self.state         = "stop"
         self.end_of_action = False
         self.got_target    = False
 
-        # ── Odometría ───────────────────────────────────────────────────────
+        #  Odometría 
         self.x, self.y, self.theta = 0.0, 0.0, 0.0
 
-        # ── Meta actual ─────────────────────────────────────────────────────
+
         self.xt, self.yt = 0.0, 0.0
 
         self.create_timer(0.1, self.state_machine)
 
-    # ── Callbacks ───────────────────────────────────────────────────────────
+
 
     def cb_target(self, msg: Pose):
         self.xt = msg.x
@@ -77,7 +61,7 @@ class PuzzlebotControllerClass(Node):
         self.y     = msg.y
         self.theta = msg.theta
 
-    # ── Máquina de estados ───────────────────────────────────────────────────
+
 
     def state_machine(self):
         if self.state == "stop":
@@ -101,17 +85,12 @@ class PuzzlebotControllerClass(Node):
                 self.got_target    = False
                 self.end_of_action = False
 
-    # ── Acciones ─────────────────────────────────────────────────────────────
+
 
     def stop(self):
         self.pub.publish(Twist())
 
     def go_to_angle(self):
-        """
-        Gira el robot en su lugar hasta apuntar hacia el waypoint.
-        Usa atan2 para obtener el ángulo deseado y normaliza el error
-        al rango [-π, π] para evitar giros innecesarios de 360°.
-        """
         Dx = self.xt - self.x
         Dy = self.yt - self.y
         target_angle = math.atan2(Dy, Dx)
@@ -131,16 +110,6 @@ class PuzzlebotControllerClass(Node):
             self.get_logger().info("Ángulo alineado ✓")
 
     def go_to_point(self):
-        """
-        Avanza hacia el waypoint con corrección angular proporcional.
-        El robot differential drive no puede moverse lateralmente,
-        por eso se alinea primero y luego avanza con corrección continua.
-
-        Cinemática differential drive:
-          v = (r/2) * (wR + wL)   — velocidad lineal
-          w = (r/L) * (wR - wL)   — velocidad angular
-        En el controlador: v se fija en v_normal y w = Kw * error_angular.
-        """
         Dx = self.xt - self.x
         Dy = self.yt - self.y
         dist = math.sqrt(Dx**2 + Dy**2)
@@ -160,7 +129,7 @@ class PuzzlebotControllerClass(Node):
         else:
             self.stop()
             self.end_of_action = True
-            self.get_logger().info(f"Waypoint alcanzado ✓  (dist={dist:.3f} m)")
+            self.get_logger().info(f"Waypoint alcanzado   (dist={dist:.3f} m)")
 
 
 def main(args=None):

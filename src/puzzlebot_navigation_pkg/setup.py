@@ -24,6 +24,8 @@ setup(
     },
     entry_points={
         'console_scripts': [
+        'vpf_controller=puzzlebot_navigation_pkg.vpf_controller:main'
+        'obstacle_detection=puzzlebot_navigation_pkg.obstacle_detection:main'
         ],
     },
 )
